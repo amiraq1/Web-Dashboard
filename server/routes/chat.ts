@@ -1,3 +1,33 @@
+import type { Express, Request, Response } from "express";
+import { storage } from "../storage";
+import { isAuthenticated } from "../replitAuth";
+import { parseUserIntent, generateResponse, createTasksFromIntent } from "../openai";
+import { chatLimiter } from "../middleware/rateLimiter";
+
+export function registerChatRoutes(app: Express) {
+  // Get messages
+  app.get("/api/messages", isAuthenticated, async (req, res) => {
+    try {
+      const userId = (req.user as any)?.claims?.sub;
+      const messages = await storage.getMessages(userId);
+      res.json(messages);
+    } catch (error) {
+      console.error("Error getting messages:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  // Get project messages
+  app.get("/api/projects/:projectId/messages", isAuthenticated, async (req, res) => {
+    try {
+      const userId = (req.user as any)?.claims?.sub;
+      const messages = await storage.getMessages(userId, req.params.projectId);
+      res.json(messages);
+    } catch (error) {
+      console.error("Error getting project messages:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
 
   // General chat endpoint
   app.post("/api/chat", isAuthenticated, chatLimiter, async (req, res) => {
