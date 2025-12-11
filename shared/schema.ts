@@ -225,7 +225,10 @@ export const tips = pgTable("tips", {
   isActive: boolean("is_active").notNull().default(true),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
-});
+}, (table) => [
+  index("idx_tips_order_created").on(table.order, table.createdAt),
+  index("idx_tips_category_active").on(table.category, table.isActive),
+]);
 
 export const insertTipSchema = createInsertSchema(tips).omit({
   id: true,
@@ -233,7 +236,15 @@ export const insertTipSchema = createInsertSchema(tips).omit({
   updatedAt: true,
 });
 
+// Schema for updating tips - only allows specific fields to be modified
+export const updateTipSchema = insertTipSchema.partial().pick({
+  title: true,
+  content: true,
+  isActive: true,
+});
+
 export type InsertTip = z.infer<typeof insertTipSchema>;
+export type UpdateTip = z.infer<typeof updateTipSchema>;
 export type Tip = typeof tips.$inferSelect;
 
 // Tip category types

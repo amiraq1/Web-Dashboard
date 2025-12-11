@@ -5,7 +5,7 @@ import { isAuthenticated, setupAuth } from "./replitAuth";
 import { parseUserIntent, generateResponse, createTasksFromIntent } from "./openai";
 import { generateUploadUrl, deleteObject, getDownloadUrl } from "./objectStorage";
 import { processUploadedFile, analyzeFileContent, searchInFiles } from "./fileAgent";
-import { insertProjectSchema, insertTaskSchema, insertMessageSchema, insertFileSchema, insertTipSchema } from "@shared/schema";
+import { insertProjectSchema, insertTaskSchema, insertMessageSchema, insertFileSchema, insertTipSchema, updateTipSchema } from "@shared/schema";
 import { z } from "zod";
 import { apiLimiter, chatLimiter, uploadLimiter } from "./middleware/rateLimiter";
 
@@ -478,7 +478,7 @@ export async function registerRoutes(httpServer: Server, app: Express) {
     }
   });
 
-  // Tips routes
+  // Tips routes (read operations don't need additional rate limiting beyond the general apiLimiter)
   app.get("/api/tips", isAuthenticated, async (req, res) => {
     try {
       const category = req.query.category as string | undefined;
@@ -503,7 +503,7 @@ export async function registerRoutes(httpServer: Server, app: Express) {
     }
   });
 
-  app.post("/api/tips", isAuthenticated, async (req, res) => {
+  app.post("/api/tips", isAuthenticated, uploadLimiter, async (req, res) => {
     try {
       const data = insertTipSchema.parse(req.body);
       const tip = await storage.createTip(data);
@@ -517,9 +517,9 @@ export async function registerRoutes(httpServer: Server, app: Express) {
     }
   });
 
-  app.patch("/api/tips/:id", isAuthenticated, async (req, res) => {
+  app.patch("/api/tips/:id", isAuthenticated, uploadLimiter, async (req, res) => {
     try {
-      const data = insertTipSchema.partial().parse(req.body);
+      const data = updateTipSchema.parse(req.body);
       const tip = await storage.updateTip(req.params.id, data);
       if (!tip) {
         return res.status(404).json({ message: "Tip not found" });
@@ -534,7 +534,7 @@ export async function registerRoutes(httpServer: Server, app: Express) {
     }
   });
 
-  app.delete("/api/tips/:id", isAuthenticated, async (req, res) => {
+  app.delete("/api/tips/:id", isAuthenticated, uploadLimiter, async (req, res) => {
     try {
       await storage.deleteTip(req.params.id);
       res.status(204).send();
