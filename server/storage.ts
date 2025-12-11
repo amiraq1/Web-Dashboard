@@ -123,15 +123,29 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getRecentTasks(userId: string, limit = 10): Promise<Task[]> {
-    const userProjects = await this.getProjects(userId);
-    const projectIds = userProjects.map(p => p.id);
-    
-    if (projectIds.length === 0) return [];
-    
+    // Use a single efficient query with JOIN instead of fetching all projects first
     return db
-      .select()
+      .select({
+        id: tasks.id,
+        projectId: tasks.projectId,
+        title: tasks.title,
+        description: tasks.description,
+        status: tasks.status,
+        priority: tasks.priority,
+        agentType: tasks.agentType,
+        result: tasks.result,
+        inputs: tasks.inputs,
+        outputs: tasks.outputs,
+        errorMessage: tasks.errorMessage,
+        retryCount: tasks.retryCount,
+        order: tasks.order,
+        createdAt: tasks.createdAt,
+        updatedAt: tasks.updatedAt,
+        completedAt: tasks.completedAt,
+      })
       .from(tasks)
-      .where(sql`${tasks.projectId} IN (${sql.join(projectIds.map(id => sql`${id}`), sql`, `)})`)
+      .innerJoin(projects, eq(tasks.projectId, projects.id))
+      .where(eq(projects.userId, userId))
       .orderBy(desc(tasks.updatedAt))
       .limit(limit);
   }
