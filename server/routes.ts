@@ -4,6 +4,7 @@ import { storage } from "./storage";
 import { isAuthenticated, setupAuth } from "./replitAuth";
 import { parseUserIntent, generateResponse, createTasksFromIntent } from "./openai";
 import { generateUploadUrl, deleteObject, getDownloadUrl } from "./objectStorage";
+import { processUploadedFile, analyzeFileContent, searchInFiles } from "./fileAgent";
 import { insertProjectSchema, insertTaskSchema, insertMessageSchema, insertFileSchema } from "@shared/schema";
 import { z } from "zod";
 
@@ -234,12 +235,50 @@ export async function registerRoutes(httpServer: Server, app: Express) {
         objectPath: req.body.uploadURL || req.body.objectPath,
       });
       const file = await storage.createFile(data);
+      
+      // Process file in background for text extraction
+      processUploadedFile(file.id).catch(err => 
+        console.error("Background file processing failed:", err)
+      );
+      
       res.status(201).json(file);
     } catch (error) {
       if (error instanceof z.ZodError) {
         return res.status(400).json({ message: "Invalid data", errors: error.errors });
       }
       console.error("Error creating file:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  // File analysis endpoint
+  app.get("/api/files/:id/analyze", isAuthenticated, async (req, res) => {
+    try {
+      const analysis = await analyzeFileContent(req.params.id);
+      if (!analysis) {
+        return res.status(404).json({ message: "File not found or could not be analyzed" });
+      }
+      res.json({ analysis });
+    } catch (error) {
+      console.error("Error analyzing file:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  // File search endpoint
+  app.get("/api/files/search", isAuthenticated, async (req, res) => {
+    try {
+      const userId = (req.user as any)?.claims?.sub;
+      const query = req.query.q as string;
+      
+      if (!query) {
+        return res.status(400).json({ message: "Search query is required" });
+      }
+      
+      const results = await searchInFiles(userId, query);
+      res.json(results);
+    } catch (error) {
+      console.error("Error searching files:", error);
       res.status(500).json({ message: "Internal server error" });
     }
   });

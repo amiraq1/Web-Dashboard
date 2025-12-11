@@ -120,6 +120,26 @@ export default function ProjectDetail() {
     },
   });
 
+  const toggleTaskMutation = useMutation({
+    mutationFn: async ({ taskId, newStatus }: { taskId: string; newStatus: string }) => {
+      return apiRequest("PATCH", `/api/tasks/${taskId}`, { 
+        status: newStatus,
+        completedAt: newStatus === "completed" ? new Date().toISOString() : null,
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/projects", id, "tasks"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/projects", id] });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "حدث خطأ",
+        description: error.message || "فشل في تحديث المهمة",
+        variant: "destructive",
+      });
+    },
+  });
+
   const deleteTaskMutation = useMutation({
     mutationFn: async (taskId: string) => {
       return apiRequest("DELETE", `/api/tasks/${taskId}`);
@@ -257,6 +277,10 @@ export default function ProjectDetail() {
                 <TaskItem
                   key={task.id}
                   task={task}
+                  onToggleComplete={() => {
+                    const newStatus = task.status === "completed" ? "pending" : "completed";
+                    toggleTaskMutation.mutate({ taskId: task.id, newStatus });
+                  }}
                   onDelete={() => deleteTaskMutation.mutate(task.id)}
                 />
               ))}

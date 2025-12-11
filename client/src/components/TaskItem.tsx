@@ -27,6 +27,7 @@ interface TaskItemProps {
   onRun?: () => void;
   onRetry?: () => void;
   onDelete?: () => void;
+  onToggleComplete?: () => void;
   onClick?: () => void;
 }
 
@@ -70,6 +71,7 @@ export function TaskItem({
   onRun,
   onRetry,
   onDelete,
+  onToggleComplete,
   onClick,
 }: TaskItemProps) {
   const status = statusConfig[task.status as keyof typeof statusConfig] || statusConfig.pending;
@@ -80,6 +82,13 @@ export function TaskItem({
     ? formatDistanceToNow(new Date(task.updatedAt), { addSuffix: true, locale: ar })
     : "";
 
+  const handleStatusClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (task.status !== "running") {
+      onToggleComplete?.();
+    }
+  };
+
   return (
     <div
       className={cn(
@@ -89,9 +98,14 @@ export function TaskItem({
       onClick={onClick}
       data-testid={`task-item-${task.id}`}
     >
-      <div className={cn("flex h-8 w-8 items-center justify-center rounded-full", status.bgColor)}>
+      <button
+        onClick={handleStatusClick}
+        className={cn("flex h-8 w-8 items-center justify-center rounded-full transition-transform active:scale-90", status.bgColor)}
+        data-testid={`button-toggle-task-${task.id}`}
+        disabled={task.status === "running"}
+      >
         <StatusIcon className={cn("h-4 w-4", status.color, status.animate && "animate-spin")} />
-      </div>
+      </button>
 
       <div className="min-w-0 flex-1 space-y-1">
         <div className="flex items-center gap-2">
