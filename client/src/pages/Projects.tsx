@@ -44,7 +44,30 @@ export default function Projects() {
 
   const createMutation = useMutation({
     mutationFn: async (data: { name: string; description?: string }) => {
-      return apiRequest("POST", "/api/projects", data);
+      const res = await apiRequest("POST", "/api/projects", data);
+      return res.json();
+    },
+    // Optimistic update: Add the new project immediately
+    onMutate: async (newProject) => {
+      await queryClient.cancelQueries({ queryKey: ["/api/projects"] });
+      const previousProjects = queryClient.getQueryData<Project[]>(["/api/projects"]);
+      
+      const optimisticProject: Project = {
+        id: `temp-${Date.now()}`,
+        userId: "",
+        name: newProject.name,
+        description: newProject.description || null,
+        status: "active",
+        progress: 0,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+      
+      queryClient.setQueryData<Project[]>(["/api/projects"], (old) => 
+        old ? [optimisticProject, ...old] : [optimisticProject]
+      );
+      
+      return { previousProjects };
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/projects"] });
@@ -57,7 +80,11 @@ export default function Projects() {
         description: "تم إنشاء المشروع بنجاح",
       });
     },
-    onError: (error: Error) => {
+    onError: (error: Error, _variables, context) => {
+      // Rollback on error
+      if (context?.previousProjects) {
+        queryClient.setQueryData(["/api/projects"], context.previousProjects);
+      }
       toast({
         title: "حدث خطأ",
         description: error.message || "فشل في إنشاء المشروع",
@@ -70,6 +97,17 @@ export default function Projects() {
     mutationFn: async (projectId: string) => {
       return apiRequest("DELETE", `/api/projects/${projectId}`);
     },
+    // Optimistic update: Remove the project immediately
+    onMutate: async (projectId) => {
+      await queryClient.cancelQueries({ queryKey: ["/api/projects"] });
+      const previousProjects = queryClient.getQueryData<Project[]>(["/api/projects"]);
+      
+      queryClient.setQueryData<Project[]>(["/api/projects"], (old) => 
+        old ? old.filter(p => p.id !== projectId) : []
+      );
+      
+      return { previousProjects };
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/projects"] });
       queryClient.invalidateQueries({ queryKey: ["/api/dashboard/stats"] });
@@ -80,7 +118,11 @@ export default function Projects() {
         description: "تم حذف المشروع بنجاح",
       });
     },
-    onError: (error: Error) => {
+    onError: (error: Error, _variables, context) => {
+      // Rollback on error
+      if (context?.previousProjects) {
+        queryClient.setQueryData(["/api/projects"], context.previousProjects);
+      }
       toast({
         title: "حدث خطأ",
         description: error.message || "فشل في حذف المشروع",

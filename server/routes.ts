@@ -7,9 +7,13 @@ import { generateUploadUrl, deleteObject, getDownloadUrl } from "./objectStorage
 import { processUploadedFile, analyzeFileContent, searchInFiles } from "./fileAgent";
 import { insertProjectSchema, insertTaskSchema, insertMessageSchema, insertFileSchema } from "@shared/schema";
 import { z } from "zod";
+import { apiLimiter, chatLimiter, uploadLimiter } from "./middleware/rateLimiter";
 
 export async function registerRoutes(httpServer: Server, app: Express) {
   await setupAuth(app);
+
+  // Apply general API rate limiting to all /api routes
+  app.use("/api", apiLimiter);
 
   // Auth routes
   app.get("/api/auth/user", isAuthenticated, async (req, res) => {
@@ -215,7 +219,7 @@ export async function registerRoutes(httpServer: Server, app: Express) {
     }
   });
 
-  app.post("/api/objects/upload", isAuthenticated, async (req, res) => {
+  app.post("/api/objects/upload", isAuthenticated, uploadLimiter, async (req, res) => {
     try {
       const fileName = req.body.fileName || `file-${Date.now()}`;
       const result = await generateUploadUrl(fileName);
@@ -226,7 +230,7 @@ export async function registerRoutes(httpServer: Server, app: Express) {
     }
   });
 
-  app.post("/api/files", isAuthenticated, async (req, res) => {
+  app.post("/api/files", isAuthenticated, uploadLimiter, async (req, res) => {
     try {
       const userId = (req.user as any)?.claims?.sub;
       const data = insertFileSchema.parse({
@@ -321,7 +325,7 @@ export async function registerRoutes(httpServer: Server, app: Express) {
   });
 
   // Chat endpoint with AI integration
-  app.post("/api/chat", isAuthenticated, async (req, res) => {
+  app.post("/api/chat", isAuthenticated, chatLimiter, async (req, res) => {
     try {
       const userId = (req.user as any)?.claims?.sub;
       const { message } = req.body;
@@ -401,7 +405,7 @@ export async function registerRoutes(httpServer: Server, app: Express) {
   });
 
   // Project-specific chat endpoint
-  app.post("/api/projects/:projectId/chat", isAuthenticated, async (req, res) => {
+  app.post("/api/projects/:projectId/chat", isAuthenticated, chatLimiter, async (req, res) => {
     try {
       const userId = (req.user as any)?.claims?.sub;
       const { projectId } = req.params;
