@@ -5,7 +5,7 @@ import { isAuthenticated, setupAuth } from "./replitAuth";
 import { parseUserIntent, generateResponse, createTasksFromIntent } from "./openai";
 import { generateUploadUrl, deleteObject, getDownloadUrl } from "./objectStorage";
 import { processUploadedFile, analyzeFileContent, searchInFiles } from "./fileAgent";
-import { insertProjectSchema, insertTaskSchema, insertMessageSchema, insertFileSchema } from "@shared/schema";
+import { insertProjectSchema, insertTaskSchema, insertMessageSchema, insertFileSchema, insertTipSchema, updateTipSchema } from "@shared/schema";
 import { z } from "zod";
 import { apiLimiter, chatLimiter, uploadLimiter } from "./middleware/rateLimiter";
 
@@ -474,6 +474,72 @@ export async function registerRoutes(httpServer: Server, app: Express) {
       });
     } catch (error) {
       console.error("Error in project chat:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  // Tips routes (read operations don't need additional rate limiting beyond the general apiLimiter)
+  app.get("/api/tips", isAuthenticated, async (req, res) => {
+    try {
+      const category = req.query.category as string | undefined;
+      const tips = await storage.getTips(category);
+      res.json(tips);
+    } catch (error) {
+      console.error("Error getting tips:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  app.get("/api/tips/:id", isAuthenticated, async (req, res) => {
+    try {
+      const tip = await storage.getTip(req.params.id);
+      if (!tip) {
+        return res.status(404).json({ message: "Tip not found" });
+      }
+      res.json(tip);
+    } catch (error) {
+      console.error("Error getting tip:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  app.post("/api/tips", isAuthenticated, uploadLimiter, async (req, res) => {
+    try {
+      const data = insertTipSchema.parse(req.body);
+      const tip = await storage.createTip(data);
+      res.status(201).json(tip);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: "Invalid data", errors: error.errors });
+      }
+      console.error("Error creating tip:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  app.patch("/api/tips/:id", isAuthenticated, uploadLimiter, async (req, res) => {
+    try {
+      const data = updateTipSchema.parse(req.body);
+      const tip = await storage.updateTip(req.params.id, data);
+      if (!tip) {
+        return res.status(404).json({ message: "Tip not found" });
+      }
+      res.json(tip);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: "Invalid data", errors: error.errors });
+      }
+      console.error("Error updating tip:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  app.delete("/api/tips/:id", isAuthenticated, uploadLimiter, async (req, res) => {
+    try {
+      await storage.deleteTip(req.params.id);
+      res.status(204).send();
+    } catch (error) {
+      console.error("Error deleting tip:", error);
       res.status(500).json({ message: "Internal server error" });
     }
   });

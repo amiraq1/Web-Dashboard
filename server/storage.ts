@@ -4,6 +4,7 @@ import {
   tasks,
   files,
   messages,
+  tips,
   type User,
   type UpsertUser,
   type Project,
@@ -14,6 +15,8 @@ import {
   type InsertFile,
   type Message,
   type InsertMessage,
+  type Tip,
+  type InsertTip,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, and, sql } from "drizzle-orm";
@@ -57,6 +60,13 @@ export interface IStorage {
     totalFiles: number;
     aiUsage: number;
   }>;
+  
+  // Tips operations
+  getTips(category?: string): Promise<Tip[]>;
+  getTip(id: string): Promise<Tip | undefined>;
+  createTip(tip: InsertTip): Promise<Tip>;
+  updateTip(id: string, updates: Partial<InsertTip>): Promise<Tip | undefined>;
+  deleteTip(id: string): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -276,6 +286,45 @@ export class DatabaseStorage implements IStorage {
       totalFiles,
       aiUsage,
     };
+  }
+
+  // Tips operations
+  async getTips(category?: string): Promise<Tip[]> {
+    if (category) {
+      return db
+        .select()
+        .from(tips)
+        .where(and(eq(tips.category, category), eq(tips.isActive, true)))
+        .orderBy(tips.order, desc(tips.createdAt));
+    }
+    return db
+      .select()
+      .from(tips)
+      .where(eq(tips.isActive, true))
+      .orderBy(tips.order, desc(tips.createdAt));
+  }
+
+  async getTip(id: string): Promise<Tip | undefined> {
+    const [tip] = await db.select().from(tips).where(eq(tips.id, id));
+    return tip;
+  }
+
+  async createTip(tip: InsertTip): Promise<Tip> {
+    const [newTip] = await db.insert(tips).values(tip).returning();
+    return newTip;
+  }
+
+  async updateTip(id: string, updates: Partial<InsertTip>): Promise<Tip | undefined> {
+    const [tip] = await db
+      .update(tips)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(tips.id, id))
+      .returning();
+    return tip;
+  }
+
+  async deleteTip(id: string): Promise<void> {
+    await db.delete(tips).where(eq(tips.id, id));
   }
 }
 

@@ -15,6 +15,7 @@ import Projects from "@/pages/Projects";
 import ProjectDetail from "@/pages/ProjectDetail";
 import Files from "@/pages/Files";
 import Chat from "@/pages/Chat";
+import Tips from "@/pages/Tips";
 
 function AuthenticatedRouter() {
   const { user } = useAuth();
@@ -42,6 +43,7 @@ function AuthenticatedRouter() {
               <Route path="/projects/:id/edit" component={ProjectDetail} />
               <Route path="/files" component={Files} />
               <Route path="/chat" component={Chat} />
+              <Route path="/tips" component={Tips} />
               <Route component={NotFound} />
             </Switch>
           </main>

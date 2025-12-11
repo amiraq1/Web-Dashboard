@@ -8,6 +8,7 @@ import {
   LogOut,
   Sparkles,
   Plus,
+  Lightbulb,
 } from "lucide-react";
 import {
   Sidebar,
@@ -56,6 +57,11 @@ const navigationItems = [
     title: "المحادثات",
     url: "/chat",
     icon: MessageSquare,
+  },
+  {
+    title: "نصائح",
+    url: "/tips",
+    icon: Lightbulb,
   },
 ];
 
