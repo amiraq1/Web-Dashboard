@@ -6,10 +6,26 @@ import session from "express-session";
 import type { Express, RequestHandler } from "express";
 import memoize from "memoizee";
 import connectPg from "connect-pg-simple";
+import MemoryStore from "memorystore";
 import { storage } from "./storage";
+
+// Check if we're in local development mode (no Replit Auth)
+const isLocalDev = process.env.LOCAL_DEV === "true" || !process.env.REPL_ID || process.env.REPL_ID === "local-dev";
+
+// Mock user for local development
+const mockDevUser = {
+  id: "dev-user-001",
+  email: "dev@localhost.com",
+  firstName: "مطور",
+  lastName: "محلي",
+  profileImageUrl: null,
+};
 
 const getOidcConfig = memoize(
   async () => {
+    if (isLocalDev) {
+      return null; // Skip OIDC in local dev
+    }
     return await client.discovery(
       new URL(process.env.ISSUER_URL ?? "https://replit.com/oidc"),
       process.env.REPL_ID!
@@ -20,21 +36,32 @@ const getOidcConfig = memoize(
 
 export function getSession() {
   const sessionTtl = 7 * 24 * 60 * 60 * 1000; // 1 week
-  const pgStore = connectPg(session);
-  const sessionStore = new pgStore({
-    conString: process.env.DATABASE_URL,
-    createTableIfMissing: false,
-    ttl: sessionTtl,
-    tableName: "sessions",
-  });
+  
+  // Use memory store for local development, PostgreSQL for production
+  let sessionStore;
+  if (isLocalDev) {
+    const MemStore = MemoryStore(session);
+    sessionStore = new MemStore({
+      checkPeriod: 86400000, // prune expired entries every 24h
+    });
+  } else {
+    const pgStore = connectPg(session);
+    sessionStore = new pgStore({
+      conString: process.env.DATABASE_URL,
+      createTableIfMissing: false,
+      ttl: sessionTtl,
+      tableName: "sessions",
+    });
+  }
+  
   return session({
-    secret: process.env.SESSION_SECRET!,
+    secret: process.env.SESSION_SECRET || "dev-secret-key",
     store: sessionStore,
     resave: false,
     saveUninitialized: false,
     cookie: {
       httpOnly: true,
-      secure: true,
+      secure: !isLocalDev, // Allow non-HTTPS in local dev
       maxAge: sessionTtl,
     },
   });
@@ -68,6 +95,45 @@ export async function setupAuth(app: Express) {
   app.use(passport.initialize());
   app.use(passport.session());
 
+  // Local development mode - auto-login with mock user
+  if (isLocalDev) {
+    console.log("🔧 Running in LOCAL DEV mode - authentication bypassed");
+    
+    // Create mock user in database
+    try {
+      await storage.upsertUser(mockDevUser);
+      console.log("✅ Mock dev user created/updated");
+    } catch (error) {
+      console.log("⚠️ Could not create mock user (database may be unavailable)");
+    }
+
+    // Auto-login route for dev
+    app.get("/api/login", (req, res) => {
+      const devUser = {
+        claims: { sub: mockDevUser.id },
+        expires_at: Math.floor(Date.now() / 1000) + 86400 * 7, // 7 days
+      };
+      req.login(devUser, (err) => {
+        if (err) {
+          return res.status(500).json({ message: "Login failed" });
+        }
+        res.redirect("/");
+      });
+    });
+
+    app.get("/api/callback", (req, res) => res.redirect("/"));
+    
+    app.get("/api/logout", (req, res) => {
+      req.logout(() => res.redirect("/"));
+    });
+
+    passport.serializeUser((user: Express.User, cb) => cb(null, user));
+    passport.deserializeUser((user: Express.User, cb) => cb(null, user));
+
+    return;
+  }
+
+  // Production mode - use Replit Auth
   const config = await getOidcConfig();
 
   const verify: VerifyFunction = async (
@@ -121,7 +187,7 @@ export async function setupAuth(app: Express) {
   app.get("/api/logout", (req, res) => {
     req.logout(() => {
       res.redirect(
-        client.buildEndSessionUrl(config, {
+        client.buildEndSessionUrl(config!, {
           client_id: process.env.REPL_ID!,
           post_logout_redirect_uri: `${req.protocol}://${req.hostname}`,
         }).href
@@ -131,6 +197,26 @@ export async function setupAuth(app: Express) {
 }
 
 export const isAuthenticated: RequestHandler = async (req, res, next) => {
+  // Local dev mode - auto-authenticate
+  if (isLocalDev) {
+    if (!req.isAuthenticated()) {
+      // Auto-login for convenience
+      const devUser = {
+        claims: { sub: mockDevUser.id },
+        expires_at: Math.floor(Date.now() / 1000) + 86400 * 7,
+      };
+      req.login(devUser, (err) => {
+        if (err) {
+          return res.status(401).json({ message: "Unauthorized" });
+        }
+        return next();
+      });
+      return;
+    }
+    return next();
+  }
+
+  // Production mode
   const user = req.user as any;
 
   if (!req.isAuthenticated() || !user.expires_at) {
