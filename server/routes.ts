@@ -519,12 +519,16 @@ export async function registerRoutes(httpServer: Server, app: Express) {
 
   app.patch("/api/tips/:id", isAuthenticated, async (req, res) => {
     try {
-      const tip = await storage.updateTip(req.params.id, req.body);
+      const data = insertTipSchema.partial().parse(req.body);
+      const tip = await storage.updateTip(req.params.id, data);
       if (!tip) {
         return res.status(404).json({ message: "Tip not found" });
       }
       res.json(tip);
     } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: "Invalid data", errors: error.errors });
+      }
       console.error("Error updating tip:", error);
       res.status(500).json({ message: "Internal server error" });
     }
