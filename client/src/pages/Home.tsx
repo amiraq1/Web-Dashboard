@@ -1,9 +1,10 @@
 import { useQuery } from "@tanstack/react-query";
-import { FolderKanban, CheckCircle2, FileText, Sparkles } from "lucide-react";
+import { FolderKanban, CheckCircle2, FileText, Sparkles, Lightbulb } from "lucide-react";
 import { CommandBar } from "@/components/CommandBar";
 import { ProjectCard } from "@/components/ProjectCard";
 import { StatsCard } from "@/components/StatsCard";
 import { Timeline } from "@/components/Timeline";
+import { TipsCard } from "@/components/TipsCard";
 import {
   ProjectCardSkeleton,
   StatsCardSkeleton,
@@ -14,7 +15,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useLocation } from "wouter";
-import type { Project, Task } from "@shared/schema";
+import type { Project, Task, Tip } from "@shared/schema";
 
 interface DashboardStats {
   totalProjects: number;
@@ -38,6 +39,10 @@ export default function Home() {
 
   const { data: recentTasks, isLoading: tasksLoading } = useQuery<Task[]>({
     queryKey: ["/api/tasks/recent"],
+  });
+
+  const { data: tips, isLoading: tipsLoading } = useQuery<Tip[]>({
+    queryKey: ["/api/tips"],
   });
 
   const chatMutation = useMutation({
@@ -190,6 +195,45 @@ export default function Home() {
             <Timeline tasks={recentTasks || []} />
           )}
         </div>
+      </div>
+
+      {/* Tips Section */}
+      <div className="space-y-4">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Lightbulb className="h-5 w-5 text-primary" />
+            <h2 className="text-xl font-semibold">نصائح مفيدة</h2>
+          </div>
+          <button
+            onClick={() => navigate("/tips")}
+            className="text-sm text-primary hover:underline"
+          >
+            عرض المزيد
+          </button>
+        </div>
+
+        {tipsLoading ? (
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+            {[1, 2, 3].map((i) => (
+              <div key={i} className="animate-pulse rounded-lg border bg-card p-4">
+                <div className="mb-3 flex gap-3">
+                  <div className="h-10 w-10 rounded-full bg-muted"></div>
+                  <div className="flex-1 space-y-2">
+                    <div className="h-4 w-3/4 rounded bg-muted"></div>
+                    <div className="h-3 w-full rounded bg-muted"></div>
+                    <div className="h-3 w-5/6 rounded bg-muted"></div>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : tips && tips.length > 0 ? (
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+            {tips.slice(0, 3).map((tip) => (
+              <TipsCard key={tip.id} tip={tip} />
+            ))}
+          </div>
+        ) : null}
       </div>
     </div>
   );

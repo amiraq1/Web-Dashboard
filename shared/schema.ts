@@ -213,3 +213,40 @@ export type ProjectStatus = typeof projectStatuses[number];
 // Priority types
 export const priorities = ["low", "normal", "high", "urgent"] as const;
 export type Priority = typeof priorities[number];
+
+// Tips table - helpful advice for users
+export const tips = pgTable("tips", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  title: varchar("title", { length: 255 }).notNull(),
+  content: text("content").notNull(),
+  category: varchar("category", { length: 50 }).notNull().default("general"),
+  icon: varchar("icon", { length: 50 }),
+  order: integer("order").notNull().default(0),
+  isActive: boolean("is_active").notNull().default(true),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (table) => [
+  index("idx_tips_order_created").on(table.order, table.createdAt),
+  index("idx_tips_category_active").on(table.category, table.isActive),
+]);
+
+export const insertTipSchema = createInsertSchema(tips).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+// Schema for updating tips - only allows specific fields to be modified
+export const updateTipSchema = insertTipSchema.partial().pick({
+  title: true,
+  content: true,
+  isActive: true,
+});
+
+export type InsertTip = z.infer<typeof insertTipSchema>;
+export type UpdateTip = z.infer<typeof updateTipSchema>;
+export type Tip = typeof tips.$inferSelect;
+
+// Tip category types
+export const tipCategories = ["general", "projects", "tasks", "files", "chat", "productivity"] as const;
+export type TipCategory = typeof tipCategories[number];
